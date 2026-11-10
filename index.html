@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probador de programas Python</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6fa; --panel:#ffffff; --ink:#1a2233; --muted:#5b6578; --line:#d5dbe6;
+  --accent:#2556d9; --accent-ink:#ffffff; --con-bg:#0e1a2e; --con-ink:#e4ebf6;
+  --con-in:#ffd479; --con-err:#ff8f8f; --con-ok:#7fd8b0; --sel:#e5ecff;
+  --sans:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151f; --panel:#18202e; --ink:#e7ecf5; --muted:#9aa6bb; --line:#2c3749;
+    --accent:#6f95ff; --accent-ink:#0b1220; --con-bg:#0a111d; --sel:#22304d;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:1rem;line-height:1.5;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+header{padding:1.25rem 1.25rem .5rem;max-width:68rem;margin:0 auto}
+h1{font-size:1.5rem;margin:0 0 .25rem}
+header p{margin:0;color:var(--muted);max-width:60ch}
+main{max-width:68rem;margin:0 auto;padding:1rem 1.25rem 2rem;display:grid;gap:1rem;
+  grid-template-columns:minmax(0,18rem) minmax(0,1fr)}
+@media (max-width:760px){main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1rem}
+.panel h2{font-size:1rem;margin:0 0 .75rem}
+#drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:1.25rem 1rem;text-align:center;
+  cursor:pointer;color:var(--muted)}
+#drop.over,#drop:focus-within{border-color:var(--accent);color:var(--ink)}
+#drop strong{color:var(--ink)}
+#picker{position:absolute;width:1px;height:1px;opacity:0}
+#list{list-style:none;margin:.75rem 0 0;padding:0;display:grid;gap:.25rem}
+#list button{width:100%;text-align:left;font:inherit;font-family:var(--mono);font-size:.875rem;color:var(--ink);
+  background:transparent;border:1px solid transparent;border-radius:6px;padding:.5rem .6rem;cursor:pointer;
+  overflow-wrap:anywhere}
+#list button:hover{border-color:var(--line)}
+#list button[aria-current="true"]{background:var(--sel);border-color:var(--accent)}
+.empty{color:var(--muted);font-size:.9rem;margin:.75rem 0 0}
+.right{display:grid;gap:1rem;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem}
+.bar h2{margin:0;flex:1 1 auto;font-family:var(--mono);font-size:.95rem;overflow-wrap:anywhere}
+.btn{font:inherit;font-weight:700;border-radius:8px;padding:.5rem 1rem;cursor:pointer;border:1px solid var(--line);
+  background:transparent;color:var(--ink)}
+.btn.main{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+textarea{width:100%;min-height:13rem;resize:vertical;font-family:var(--mono);font-size:.875rem;line-height:1.5;
+  background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:.75rem;tab-size:4;white-space:pre}
+#con{margin:0;min-height:9rem;max-height:22rem;overflow:auto;background:var(--con-bg);color:var(--con-ink);
+  border-radius:8px;padding:.75rem;font-family:var(--mono);font-size:.875rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.in{color:var(--con-in)} .err{color:var(--con-err)} .ok{color:var(--con-ok)}
+.field{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:0 0 .75rem;font-weight:700}
+.field input{flex:1 1 14rem;font:inherit;font-weight:400;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:8px;padding:.5rem .75rem}
+#status{font-size:.875rem;color:var(--muted);margin:0 0 .5rem}
+.hint{color:var(--muted);font-size:.875rem;margin:.75rem 0 0}
+@media (prefers-reduced-motion:no-preference){#drop{transition:border-color .15s}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Probador de programas Python</h1>
+  <p>Subí los archivos .py de tus alumnos, elegí uno y ejecutalo en el navegador. No se instala nada ni se envía nada a ningún servidor.</p>
+</header>
+<main>
+  <section class="panel" aria-labelledby="h-files">
+    <h2 id="h-files">Archivos</h2>
+    <label id="drop">
+      <!-- Modificado el atributo accept para compatibilidad total con celulares Android e iOS -->
+      <input id="picker" type="file" accept=".py,.txt,text/plain,application/octet-stream,*/*" multiple>
+      <strong>Elegir archivos .py</strong><br>o arrastrarlos hasta acá
+    </label>
+    <ul id="list"></ul>
+    <p class="empty" id="empty">Todavía no subiste ningún archivo.</p>
+  </section>
+
+  <div class="right">
+    <section class="panel" aria-labelledby="h-code">
+      <div class="bar">
+        <h2 id="h-code">Código</h2>
+        <button class="btn main" id="run" disabled>Ejecutar</button>
+      </div>
+      <p id="status" role="status">Cargando Python…</p>
+      <textarea id="code" spellcheck="false" aria-label="Código del programa seleccionado" placeholder="Subí un archivo para ver su código acá. También podés editarlo y volver a ejecutarlo."></textarea>
+      <p class="hint">Cuando el programa pida un dato, aparece una ventana para escribirlo. Si un programa queda en un bucle infinito, recargá la página.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-out">
+      <div class="bar">
+        <h2 id="h-out">Resultado</h2>
+        <button class="btn" id="clear">Limpiar</button>
+        <button class="btn main" id="pdf" disabled>Descargar PDF</button>
+      </div>
+      <label class="field">Nombre del alumno
+        <input id="alumno" type="text" autocomplete="name" placeholder="Nombre y apellido">
+      </label>
+      <pre id="con" aria-live="polite"></pre>
+    </section>
+  </div>
+</main>
+
+<script>
+(function(){
+  var $ = function(s){ return document.querySelector(s); };
+  var files = [], sel = -1, py = null, line = '';
+  var con = $('#con'), code = $('#code'), runBtn = $('#run'), status = $('#status');
+
+  function append(text, cls){
+    var s = document.createElement('span');
+    if (cls) s.className = cls;
+    s.textContent = text;
+    con.appendChild(s);
+    con.scrollTop = con.scrollHeight;
+  }
+
+  function renderList(){
+    var ul = $('#list'); ul.innerHTML = '';
+    $('#empty').hidden = files.length > 0;
+    files.forEach(function(f, i){
+      var li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button'; b.textContent = f.name;
+      if (i === sel) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', function(){ select(i); });
+      li.appendChild(b); ul.appendChild(li);
+    });
+  }
+
+  function select(i){
+    sel = i;
+    code.value = files[i].code;
+    $('#h-code').textContent = files[i].name;
+    renderList();
+    updateRun();
+  }
+
+  function updateRun(){ runBtn.disabled = !(py && sel >= 0); }
+
+  async function addFiles(list){
+    var added = 0;
+    for (var k = 0; k < list.length; k++){
+      var f = list[k];
+      // Validación estricta por extensión .py para garantizar seguridad en móviles
+      if (!/\.py$/i.test(f.name)) { append('Se ignoró "' + f.name + '": no es un archivo .py.\n', 'err'); continue; }
+      var text = await f.text();
+      var idx = files.findIndex(function(x){ return x.name === f.name; });
+      if (idx >= 0) files[idx].code = text; else files.push({name: f.name, code: text});
+      added++;
+    }
+    if (added) {
+      files.sort(function(a, b){ return a.name.localeCompare(b.name, 'es'); });
+      var first = list[0].name;
+      select(Math.max(0, files.findIndex(function(x){ return x.name === first; })));
+    }
+  }
+
+  var picker = $('#picker'), drop = $('#drop');
+  picker.addEventListener('change', function(){ addFiles(picker.files); picker.value = ''; });
+  ['dragenter','dragover'].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function(e){ addFiles(e.dataTransfer.files); });
+
+  code.addEventListener('input', function(){ if (sel >= 0) files[sel].code = code.value; });
+  var pdfBtn = $('#pdf'), last = null;
+  $('#clear').addEventListener('click', function(){ con.textContent = ''; line = ''; last = null; pdfBtn.disabled = true; });
+
+  function makePdf(){
+    var J = window.jspdf && window.jspdf.jsPDF;
+    if (!J) { append('No se pudo cargar el generador de PDF. Revisá la conexión y recargá la página.\n', 'err'); return; }
+    if (!last) return;
+    var doc = new J({unit: 'mm', format: 'a4'});
+    var M = 15, W = 210 - 2 * M, H = 297 - M, y = M;
+    function clean(t){ return t.replace(/[▶✔]/g, '').replace(/\t/g, '    ').replace(/[^\u0000-\u00FF\n]/g, '?').trim(); }
+    function put(text, font, size, style){
+      doc.setFont(font, style || 'normal'); doc.setFontSize(size);
+      var lh = size * 0.3528 * 1.4;
+      doc.splitTextToSize(text, W).forEach(function(l){
+        if (y + lh > H) { doc.addPage(); y = M; }
+        doc.text(l, M, y); y += lh;
+      });
+    }
+    var alumno = $('#alumno').value.trim();
+    put('Resultado de programa Python', 'helvetica', 16, 'bold'); y += 3;
+    put('Alumno: ' + (alumno || '(sin nombre)'), 'helvetica', 11);
+    put('Archivo: ' + clean(last.name), 'helvetica', 11);
+    put('Fecha: ' + new Date().toLocaleString('es-AR'), 'helvetica', 11); y += 5;
+    put('Resultado de la ejecución', 'helvetica', 12, 'bold'); y += 1;
+    put(clean(last.out) || '(sin salida)', 'courier', 9); y += 5;
+    put('Código', 'helvetica', 12, 'bold'); y += 1;
+    put(clean(last.code), 'courier', 9);
+    var base = (alumno || last.name.replace(/\.py$/i, '')).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    doc.save('resultado_' + (base || 'programa') + '.pdf');
+  }
+  pdfBtn.addEventListener('click', makePdf);
+
+  function setupStreams(){
+    var dOut = new TextDecoder(), dErr = new TextDecoder();
+    py.setStdout({raw: function(b){
+      var ch = dOut.decode(new Uint8Array([b & 255]), {stream: true});
+      if (ch) { append(ch); line = ch === '\n' ? '' : line + ch; }
+    }});
+    py.setStderr({raw: function(b){
+      var ch = dErr.decode(new Uint8Array([b & 255]), {stream: true});
+      if (ch) append(ch, 'err');
+    }});
+    py.setStdin({stdin: function(){
+      var ans = window.prompt(line || 'Ingresá un dato:');
+      if (ans === null) return undefined;
+      append(ans + '\n', 'in');
+      line = '';
+      return ans;
+    }});
+  }
+
+  async function run(){
+    if (!py || sel < 0) return;
+    runBtn.disabled = true;
+    con.textContent = ''; line = '';
+    append('▶ ' + files[sel].name + '\n\n', 'ok');
+    var g = py.globals.get('dict')();
+    try {
+      await py.runPythonAsync(files[sel].code, {globals: g});
+      append('\n✔ El programa terminó.\n', 'ok');
+    } catch (e) {
+      var msg = String(e.message || e);
+      var at = msg.indexOf('File "<exec>"');
+      append('\n' + (at >= 0 ? msg.slice(at) : msg) + '\n', 'err');
+    } finally {
+      last = {name: files[sel].name, code: files[sel].code, out: con.textContent};
+      pdfBtn.disabled = false;
+      g.destroy();
+      updateRun();
+    }
+  }
+  runBtn.addEventListener('click', run);
+
+  window.addEventListener('load', async function(){
+    try {
+      py = await loadPyodide();
+      setupStreams();
+      status.textContent = 'Python listo.';
+      updateRun();
+    } catch (e) {
+      status.textContent = 'No se pudo cargar Python. Revisá la conexión a internet y recargá la página.';
+    }
+  });
+})();
+</script>
+</body>
+</html>
